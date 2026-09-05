@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "max_width": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3840,
+      "default": 3840,
+      "description": "Maximum output width. Output is min(source_width, max_width); never upscaled."
+    }
+  },
+  "additionalProperties": false
+}

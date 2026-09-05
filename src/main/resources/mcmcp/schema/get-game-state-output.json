@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "captured_at": { "type": "string", "format": "date-time" },
+    "game_tick": { "type": ["integer", "null"], "minimum": 0 },
+    "ready": { "type": "boolean" },
+    "client": {
+      "type": ["object", "null"],
+      "properties": {
+        "minecraft_version": { "type": "string" },
+        "mod_version": { "type": "string" },
+        "fps": { "type": ["integer", "null"] },
+        "screen": { "type": ["string", "null"] },
+        "paused": { "type": "boolean" },
+        "window_focused": { "type": "boolean" },
+        "gui_scale": { "type": ["integer", "null"] }
+      },
+      "required": ["minecraft_version", "mod_version", "fps", "screen", "paused", "window_focused", "gui_scale"],
+      "additionalProperties": false
+    },
+    "connection": {
+      "type": ["object", "null"],
+      "properties": {
+        "connected": { "type": "boolean" },
+        "type": { "type": ["string", "null"], "enum": ["none", "singleplayer", "lan", "multiplayer", "realms", null] },
+        "server_address": { "type": ["string", "null"] },
+        "latency_ms": { "type": ["integer", "null"] }
+      },
+      "required": ["connected", "type", "server_address", "latency_ms"],
+      "additionalProperties": false
+    },
+    "player": true,
+    "world": true,
+    "debug": true,
+    "target": true
+  },
+  "required": ["captured_at", "game_tick", "ready"],
+  "additionalProperties": false
+}

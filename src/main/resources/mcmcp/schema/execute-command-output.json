@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["submitted"]
+    },
+    "command": {
+      "type": "string",
+      "description": "The original command string including the leading '/'."
+    },
+    "submitted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC RFC 3339 timestamp when the command was submitted to the game connection."
+    }
+  },
+  "required": ["status", "command", "submitted_at"],
+  "additionalProperties": false
+}

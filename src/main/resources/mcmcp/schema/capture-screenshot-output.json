@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "description": "Screenshot metadata only. Base64 PNG data is carried in an MCP Image Content block, not in structuredContent.",
+  "properties": {
+    "captured_at": { "type": "string", "format": "date-time" },
+    "width": { "type": "integer", "minimum": 1 },
+    "height": { "type": "integer", "minimum": 1 },
+    "mime_type": { "type": "string", "const": "image/png" },
+    "source_width": { "type": "integer", "minimum": 1 },
+    "source_height": { "type": "integer", "minimum": 1 }
+  },
+  "required": ["captured_at", "width", "height", "mime_type", "source_width", "source_height"],
+  "additionalProperties": false
+}

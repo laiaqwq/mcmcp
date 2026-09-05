@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "mcmcp",
+  "version": "${version}",
+  "name": "MCMCP",
+  "description": "Pure client-side Fabric mod exposing an MCP 2026-07-28 server inside the Minecraft client.",
+  "authors": ["MCMCP"],
+  "contact": {
+    "homepage": "https://github.com/mcmcp/mcmcp",
+    "sources": "https://github.com/mcmcp/mcmcp"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.mcmcp.client.McmcpClient"
+    ]
+  },
+  "mixins": [
+    "mcmcp.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.4",
+    "minecraft": "26.2",
+    "fabric-api": "*",
+    "java": ">=25"
+  }
+}

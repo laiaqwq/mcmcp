@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Slash command beginning with '/'. The leading '/' is stripped before sending."
+    }
+  },
+  "required": ["command"],
+  "additionalProperties": false
+}

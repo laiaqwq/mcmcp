@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "after_id": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Only return messages with id > after_id."
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200,
+      "default": 50
+    },
+    "types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["chat", "system"]
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "session_id": { "type": "string" },
+          "type": { "type": "string", "enum": ["chat", "system"] },
+          "plain_text": { "type": "string" },
+          "received_at": { "type": "string", "format": "date-time" },
+          "game_tick": { "type": ["integer", "null"], "minimum": 0 }
+        },
+        "required": ["id", "session_id", "type", "plain_text", "received_at", "game_tick"],
+        "additionalProperties": false
+      }
+    },
+    "oldest_available_id": { "type": ["integer", "null"] },
+    "newest_available_id": { "type": ["integer", "null"] },
+    "next_after_id": { "type": ["integer", "null"] },
+    "has_more": { "type": "boolean" },
+    "gap_detected": { "type": "boolean" },
+    "evicted_message_count": { "type": "integer", "minimum": 0 }
+  },
+  "required": ["messages", "oldest_available_id", "newest_available_id", "next_after_id", "has_more", "gap_detected", "evicted_message_count"],
+  "additionalProperties": false
+}
