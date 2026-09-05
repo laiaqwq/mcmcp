@@ -8,7 +8,7 @@ Implementation: `./IMPLEMENTATION.md`
 - Pure-Java layers (domain, protocol, application, transport, infrastructure): `gradle test`
 - Full build requires Minecraft 26.2 + Fabric Loom 1.17 (not yet available): `gradle build`
 - Java toolchain: Java 25
-- 65 unit tests covering StrictJsonReader, BoundedChatBuffer, CoordMath, RateLimiter, McpConfig, McpRequestValidator, ToolCatalog, HttpSecurityGate, PngEncoder
+- 315 unit tests covering StrictJsonReader, BoundedChatBuffer, CoordMath, RateLimiter, McmcpConfig, ConfigLoader, McpRequestValidator, ToolCatalog, HttpSecurityGate (+check() full path), HeaderGateHandler, InFlightGateHandler, ProtocolDispatchHandler (+error paths), PngEncoder, all 4 tool handlers, ToolDispatcher, JsonRpcCodec, McpResponses, JSON Schema contracts (via com.networknt json-schema-validator), and headless client-adapter tests (ClientSessionTracker, ScreenIdMapper, ChatListener, adapters)
 
 ## Architecture Notes
 
