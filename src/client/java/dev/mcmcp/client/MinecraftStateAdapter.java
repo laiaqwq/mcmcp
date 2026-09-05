@@ -247,9 +247,9 @@ public final class MinecraftStateAdapter implements MinecraftPorts.StatePort {
         LevelData levelData = level.getLevelData();
         String difficulty = levelData.getDifficulty().getSerializedName();
         boolean hardcore = levelData.isHardcore();
-        long gameTime = levelData.getGameTime();
-        Long day = gameTime / 24000L;
-        Long timeOfDay = gameTime % 24000L;
+        long dayTime = level.getOverworldClockTime();
+        Long day = dayTime / 24000L;
+        Long timeOfDay = dayTime % 24000L;
         boolean raining = level.isRaining();
         boolean thundering = level.isThundering();
 
@@ -334,7 +334,7 @@ public final class MinecraftStateAdapter implements MinecraftPorts.StatePort {
             BlockPos bp = new BlockPos(x, y, z);
             DifficultyInstance diffInstance = new DifficultyInstance(
                 level.getLevelData().getDifficulty(),
-                level.getLevelData().getGameTime(),
+                level.getOverworldClockTime(),
                 0L,
                 0.0f
             );

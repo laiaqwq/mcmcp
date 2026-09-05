@@ -16,8 +16,9 @@ import java.util.Iterator;
 
 /**
  * PNG encoder using JDK ImageIO with explicit sRGB metadata.
- * Receives RGBA pixels from a {@link PixelFrame}, flips vertically (OpenGL origin
- * is bottom-left), optionally downscales, and produces sRGB PNG bytes.
+ * Receives top-down RGBA pixels from a {@link PixelFrame} (producers must
+ * normalize orientation; Minecraft's Screenshot.takeScreenshot already
+ * delivers top-down rows), optionally downscales, and produces sRGB PNG bytes.
  *
  * <p>This runs on the PNG worker thread, never on the render thread.
  * See IMPLEMENTATION.md §11.4.
@@ -29,7 +30,7 @@ public final class PngEncoder {
     /**
      * Encode an RGBA pixel frame to PNG bytes.
      *
-     * @param frame     the captured pixel frame (top-left origin expected after flip)
+     * @param frame     the captured pixel frame (top-left origin, top-down rows)
      * @param maxWidth  maximum output width; downscales proportionally if source is wider
      * @return PNG bytes
      */
@@ -46,14 +47,13 @@ public final class PngEncoder {
 
         byte[] rgba = frame.rgba();
 
-        // Flip vertically: OpenGL framebuffer origin is bottom-left
         BufferedImage img = new BufferedImage(outW, outH, BufferedImage.TYPE_INT_RGB);
         int[] rgbBuf = ((DataBufferInt) img.getRaster().getDataBuffer()).getData();
 
         if (outW == srcW && outH == srcH) {
-            // Direct copy with vertical flip and RGBA→RGB
+            // Direct copy with RGBA→RGB
             for (int y = 0; y < outH; y++) {
-                int srcY = srcH - 1 - y;
+                int srcY = y;
                 for (int x = 0; x < outW; x++) {
                     int srcIdx = (srcY * srcW + x) * 4;
                     int r = rgba[srcIdx] & 0xFF;
@@ -63,9 +63,9 @@ public final class PngEncoder {
                 }
             }
         } else {
-            // Simple nearest-neighbor downscale with vertical flip
+            // Simple nearest-neighbor downscale
             for (int y = 0; y < outH; y++) {
-                int srcY = srcH - 1 - (y * srcH / outH);
+                int srcY = y * srcH / outH;
                 for (int x = 0; x < outW; x++) {
                     int srcX = x * srcW / outW;
                     int srcIdx = (srcY * srcW + srcX) * 4;

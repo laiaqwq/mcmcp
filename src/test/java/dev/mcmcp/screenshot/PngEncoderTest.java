@@ -32,12 +32,37 @@ class PngEncoderTest {
         assertNotNull(img);
         assertEquals(w, img.getWidth());
         assertEquals(h, img.getHeight());
-        // Top-left pixel should be red (after vertical flip, bottom-left was red too)
+        // Top-left pixel should be red
         int rgb = img.getRGB(0, 0);
         assertEquals(255, (rgb >> 16) & 0xFF); // R
         assertEquals(0, (rgb >> 8) & 0xFF);    // G
         assertEquals(0, rgb & 0xFF);           // B
 
+        frame.close();
+    }
+
+    @Test
+    void encodePreservesTopDownOrientation() throws IOException {
+        int w = 4, h = 3;
+        byte[] rgba = new byte[w * h * 4];
+        // Top row red, bottom row blue
+        for (int i = 0; i < w * h; i++) {
+            boolean topRow = i < w;
+            rgba[i * 4] = topRow ? (byte) 255 : 0;               // R
+            rgba[i * 4 + 1] = 0;                                 // G
+            rgba[i * 4 + 2] = topRow ? 0 : (byte) 255;           // B
+            rgba[i * 4 + 3] = (byte) 255;                        // A
+        }
+        var frame = new PixelFrame(rgba, w, h, "2026-01-01T00:00:00Z");
+        byte[] png = PngEncoder.encode(frame, 3840);
+        BufferedImage img = ImageIO.read(new ByteArrayInputStream(png));
+
+        int top = img.getRGB(0, 0);
+        int bottom = img.getRGB(0, h - 1);
+        assertEquals(255, (top >> 16) & 0xFF);
+        assertEquals(0, top & 0xFF);
+        assertEquals(255, bottom & 0xFF);
+        assertEquals(0, (bottom >> 16) & 0xFF);
         frame.close();
     }
 
