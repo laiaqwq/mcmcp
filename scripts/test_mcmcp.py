@@ -3,6 +3,7 @@
 External end-to-end test for MCMCP (Minecraft MCP mod).
 
 Waits for the MCP HTTP server to become available, then exercises:
+  - Standard initialize handshake (Codex-compatible)
   - server/discover
   - tools/list
   - tools/call for all 4 tools:
@@ -93,9 +94,6 @@ def mcp_request(host, port, method, params=None, extra_headers=None, path="/mcp"
         headers["Content-Type"] = "application/json"
         headers["Accept"] = "application/json, text/event-stream"
         headers["MCP-Protocol-Version"] = PROTOCOL_VERSION
-        headers["Mcp-Method"] = method
-        if method == "tools/call" and params and "name" in params:
-            headers["Mcp-Name"] = params["name"]
     if extra_headers:
         headers.update(extra_headers)
 
@@ -122,6 +120,35 @@ def make_meta():
         "io.modelcontextprotocol/protocolVersion": PROTOCOL_VERSION,
         "io.modelcontextprotocol/clientCapabilities": {},
     }
+
+
+def test_initialize(host, port, result):
+    """Test the standard MCP initialization request used by Codex."""
+    print("\n--- Test: initialize ---")
+    params = {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {},
+        "clientInfo": {"name": "mcmcp-e2e", "version": "1.0"},
+    }
+    standard_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+    status, resp = mcp_request(
+        host, port, "initialize", params,
+        extra_headers=standard_headers, skip_default_headers=True)
+    if status != 200:
+        result.fail("initialize_status", f"expected 200, got {status}: {resp}")
+        return
+    initialized = resp.get("result", {}) if isinstance(resp, dict) else {}
+    if initialized.get("protocolVersion") == "2025-11-25":
+        result.ok("initialize_protocol_version")
+    else:
+        result.fail("initialize_protocol_version", f"unexpected result: {resp}")
+    if initialized.get("serverInfo", {}).get("name") == "mcmcp":
+        result.ok("initialize_server_info")
+    else:
+        result.fail("initialize_server_info", f"unexpected result: {resp}")
 
 
 def test_discover(host, port, result):
@@ -560,6 +587,7 @@ def main():
     result = TestResult()
 
     # Protocol tests
+    test_initialize(host, port, result)
     test_discover(host, port, result)
     test_tools_list(host, port, result)
 

@@ -9,7 +9,8 @@ class McpRequestValidatorTest {
     @Test
     void isValidProtocolVersion() {
         assertTrue(McpRequestValidator.isValidProtocolVersion("2026-07-28"));
-        assertFalse(McpRequestValidator.isValidProtocolVersion("2025-11-25"));
+        assertTrue(McpRequestValidator.isValidProtocolVersion("2025-11-25"));
+        assertTrue(McpRequestValidator.isValidProtocolVersion("2025-06-18"));
         assertFalse(McpRequestValidator.isValidProtocolVersion(null));
         // Whitespace is trimmed per HTTP header parsing rules
         assertTrue(McpRequestValidator.isValidProtocolVersion(" 2026-07-28 "));
@@ -20,6 +21,25 @@ class McpRequestValidatorTest {
         assertTrue(McpRequestValidator.methodMatchesHeader("tools/call", "tools/call"));
         assertFalse(McpRequestValidator.methodMatchesHeader("tools/list", "tools/call"));
         assertFalse(McpRequestValidator.methodMatchesHeader(null, "tools/call"));
+    }
+
+    @Test
+    void optionalMethodHeaderAllowsStandardClient() {
+        assertTrue(McpRequestValidator.optionalMethodHeaderMatches(null, "tools/list"));
+        assertTrue(McpRequestValidator.optionalMethodHeaderMatches("tools/list", "tools/list"));
+        assertFalse(McpRequestValidator.optionalMethodHeaderMatches("tools/call", "tools/list"));
+    }
+
+    @Test
+    void negotiatesStandardProtocolVersion() {
+        var params = new com.google.gson.JsonObject();
+        params.addProperty("protocolVersion", "2025-11-25");
+        assertEquals("2025-11-25", McpRequestValidator.negotiateProtocolVersion(params));
+
+        params.addProperty("protocolVersion", "2099-01-01");
+        assertEquals(McpRequestValidator.COMPATIBILITY_PROTOCOL_VERSION,
+            McpRequestValidator.negotiateProtocolVersion(params));
+        assertNull(McpRequestValidator.negotiateProtocolVersion(new com.google.gson.JsonObject()));
     }
 
     @Test
@@ -71,5 +91,36 @@ class McpRequestValidatorTest {
         var result = McpRequestValidator.validateEnvelope(body);
         assertFalse(result.valid());
         assertEquals(JsonRpcErrors.METHOD_NOT_FOUND, result.errorCode());
+    }
+
+    @Test
+    void validateEnvelopeAcceptsInitialize() {
+        var body = new com.google.gson.JsonObject();
+        body.addProperty("jsonrpc", "2.0");
+        body.addProperty("id", 1);
+        body.addProperty("method", "initialize");
+        var result = McpRequestValidator.validateEnvelope(body);
+        assertTrue(result.valid());
+        assertEquals("initialize", result.method());
+    }
+
+    @Test
+    void validateEnvelopeAcceptsNotificationWithoutId() {
+        var body = new com.google.gson.JsonObject();
+        body.addProperty("jsonrpc", "2.0");
+        body.addProperty("method", "notifications/initialized");
+        var result = McpRequestValidator.validateEnvelope(body);
+        assertTrue(result.valid());
+        assertNull(result.id());
+    }
+
+    @Test
+    void validateEnvelopeStillRequiresIdForRequests() {
+        var body = new com.google.gson.JsonObject();
+        body.addProperty("jsonrpc", "2.0");
+        body.addProperty("method", "tools/list");
+        var result = McpRequestValidator.validateEnvelope(body);
+        assertFalse(result.valid());
+        assertEquals(JsonRpcErrors.INVALID_REQUEST, result.errorCode());
     }
 }

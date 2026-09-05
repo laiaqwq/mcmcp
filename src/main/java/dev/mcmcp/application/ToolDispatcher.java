@@ -17,8 +17,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Dispatches JSON-RPC requests to the appropriate handler.
- * Routes server/discover, tools/list, and tools/call.
- * See IMPLEMENTATION.md §4.1, §9.
+ * Routes standard MCP lifecycle requests and MCMCP tool requests.
  */
 public final class ToolDispatcher {
 
@@ -60,8 +59,10 @@ public final class ToolDispatcher {
     public CompletableFuture<JsonObject> dispatch(
         JsonElement id, String method, JsonObject params, long deadlineNanos
     ) {
-        // Global rate limit for discover/list
-        if (McpRequestValidator.METHOD_DISCOVER.equals(method)
+        // Global rate limit for lifecycle/discovery/list requests
+        if (McpRequestValidator.METHOD_INITIALIZE.equals(method)
+            || McpRequestValidator.METHOD_PING.equals(method)
+            || McpRequestValidator.METHOD_DISCOVER.equals(method)
             || McpRequestValidator.METHOD_TOOLS_LIST.equals(method)) {
             if (!globalRateLimiter.tryAcquire()) {
                 JsonObject data = new JsonObject();
@@ -74,6 +75,18 @@ public final class ToolDispatcher {
         }
 
         return switch (method) {
+            case McpRequestValidator.METHOD_INITIALIZE -> {
+                String negotiated = McpRequestValidator.negotiateProtocolVersion(params);
+                if (negotiated == null) {
+                    yield CompletableFuture.completedFuture(McpResponses.error(
+                        id, dev.mcmcp.protocol.JsonRpcErrors.INVALID_PARAMS,
+                        "params.protocolVersion required"));
+                }
+                JsonObject result = McpResponses.initializeResult(modVersion, negotiated);
+                yield CompletableFuture.completedFuture(McpResponses.success(id, result));
+            }
+            case McpRequestValidator.METHOD_PING ->
+                CompletableFuture.completedFuture(McpResponses.success(id, new JsonObject()));
             case McpRequestValidator.METHOD_DISCOVER -> {
                 JsonObject result = McpResponses.discoverResult(modVersion);
                 yield CompletableFuture.completedFuture(McpResponses.success(id, result));

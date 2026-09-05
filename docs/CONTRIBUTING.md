@@ -69,7 +69,8 @@ python3 scripts/test_mcmcp.py
 ```
 
 The test script covers:
-- `server/discover` — protocol version, capabilities, server info
+- `initialize` — standard protocol negotiation, capabilities, server info
+- `server/discover` — extended protocol version discovery, capabilities, server info
 - `tools/list` — all 4 tools in correct order with schemas
 - `minecraft_get_game_state` — player, world, client, connection sections
 - `minecraft_execute_command` — command submission

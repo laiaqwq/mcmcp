@@ -59,8 +59,9 @@ public final class ProtocolDispatchHandler extends SimpleChannelInboundHandler<F
         String mcpMethod = req.headers().get("Mcp-Method");
         String mcpName = req.headers().get("Mcp-Name");
 
-        // Validate protocol version header
-        if (!McpRequestValidator.isValidProtocolVersion(protocolVersion)) {
+        // Standard clients may omit this header on initialize. On all requests,
+        // validate it when present so older MCMCP clients keep their strict checks.
+        if (protocolVersion != null && !McpRequestValidator.isValidProtocolVersion(protocolVersion)) {
             JsonObject data = new JsonObject();
             var versions = new com.google.gson.JsonArray();
             versions.add(McpRequestValidator.PROTOCOL_VERSION);
@@ -106,25 +107,37 @@ public final class ProtocolDispatchHandler extends SimpleChannelInboundHandler<F
         String method = envelopeResult.method();
         JsonObject params = envelopeResult.params();
 
-        // Validate Mcp-Method header matches body method
-        if (!McpRequestValidator.methodMatchesHeader(mcpMethod, method)) {
+        // Notifications have no JSON-RPC response. Unknown notifications are ignored,
+        // as required by JSON-RPC; initialized is currently the only lifecycle signal.
+        if (id == null && method.startsWith("notifications/")) {
+            metrics.requestFinished();
+            sendAccepted(ctx);
+            return;
+        }
+
+        // MCMCP extension headers remain supported, but standard MCP clients do not
+        // send them. If supplied, continue to reject inconsistent values.
+        if (!McpRequestValidator.optionalMethodHeaderMatches(mcpMethod, method)) {
             sendJsonRpcError(ctx, id, JsonRpcErrors.HEADER_MISMATCH,
                 "Mcp-Method header does not match body method", null, HttpResponseStatus.BAD_REQUEST);
             metrics.requestFinished();
             return;
         }
 
-        // Validate params._meta
-        var metaResult = McpRequestValidator.validateMeta(params);
-        if (!metaResult.valid()) {
-            sendJsonRpcError(ctx, id, metaResult.errorCode(), metaResult.errorMessage(),
-                metaResult.errorData(), HttpResponseStatus.BAD_REQUEST);
-            metrics.requestFinished();
-            return;
+        // Validate the 2026-07-28 extension metadata only when a client sends it.
+        if (params != null && params.has("_meta") && params.get("_meta").isJsonObject()
+            && params.getAsJsonObject("_meta").has("io.modelcontextprotocol/protocolVersion")) {
+            var metaResult = McpRequestValidator.validateMeta(params);
+            if (!metaResult.valid()) {
+                sendJsonRpcError(ctx, id, metaResult.errorCode(), metaResult.errorMessage(),
+                    metaResult.errorData(), HttpResponseStatus.BAD_REQUEST);
+                metrics.requestFinished();
+                return;
+            }
         }
 
-        // For tools/call: validate Mcp-Name header
-        if (McpRequestValidator.METHOD_TOOLS_CALL.equals(method)) {
+        // Mcp-Name is also an optional extension header.
+        if (McpRequestValidator.METHOD_TOOLS_CALL.equals(method) && mcpName != null) {
             var nameResult = McpRequestValidator.validateToolName(mcpName, params);
             if (!nameResult.valid()) {
                 sendJsonRpcError(ctx, id, nameResult.errorCode(), nameResult.errorMessage(),
@@ -181,6 +194,14 @@ public final class ProtocolDispatchHandler extends SimpleChannelInboundHandler<F
         httpResponse.headers().set(HttpHeaderNames.CONTENT_LENGTH, bytes.length);
         httpResponse.headers().set(HttpHeaderNames.CACHE_CONTROL, "no-store");
         ctx.writeAndFlush(httpResponse).addListener(ChannelFutureListener.CLOSE);
+    }
+
+    private void sendAccepted(ChannelHandlerContext ctx) {
+        FullHttpResponse response = new DefaultFullHttpResponse(
+            HttpVersion.HTTP_1_1, HttpResponseStatus.ACCEPTED, Unpooled.EMPTY_BUFFER);
+        response.headers().set(HttpHeaderNames.CONTENT_LENGTH, 0);
+        response.headers().set(HttpHeaderNames.CACHE_CONTROL, "no-store");
+        ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
 
     private void sendJsonRpcError(ChannelHandlerContext ctx, JsonElement id, int code, String message,

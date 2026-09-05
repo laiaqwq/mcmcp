@@ -15,4 +15,4 @@ Implementation: `./IMPLEMENTATION.md`
 - `src/main/java` — pure Java, no Minecraft imports (domain, protocol, application, transport, infrastructure)
 - `src/client/java` — Minecraft client adapter (requires MC 26.2 + Fabric API)
 - `src/main/resources/mcmcp/schema/` — 8 JSON Schema files (single source of truth for tool I/O)
-- Protocol: MCP 2026-07-28, single `POST /mcp`, no session, no SSE
+- Protocol: standard stateless Streamable HTTP lifecycle plus MCP 2026-07-28 discovery compatibility, single `POST /mcp`, no server-issued session, no SSE responses

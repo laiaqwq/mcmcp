@@ -9,28 +9,37 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Validates MCP 2026-07-28 request headers and JSON-RPC envelope.
- * See PRD §5.2 and IMPLEMENTATION.md §9.3.
+ * Validates MCP requests from both standard Streamable HTTP clients and the
+ * extended MCP 2026-07-28 discovery flow implemented by MCMCP.
  *
  * <p>Validation order:
  * <ol>
- *   <li>JSON-RPC envelope (jsonrpc=2.0, id, method)</li>
- *   <li>MCP-Protocol-Version header</li>
- *   <li>params._meta (protocolVersion, clientCapabilities)</li>
- *   <li>Mcp-Method header matches body.method</li>
- *   <li>For tools/call: Mcp-Name header matches params.name</li>
+ *   <li>JSON-RPC envelope (jsonrpc=2.0, optional notification id, method)</li>
+ *   <li>MCP-Protocol-Version header, when present</li>
+ *   <li>Legacy extension headers and metadata, when present</li>
  * </ol>
  */
 public final class McpRequestValidator {
 
     public static final String PROTOCOL_VERSION = "2026-07-28";
-    public static final Set<String> SUPPORTED_VERSIONS = Set.of(PROTOCOL_VERSION);
+    public static final String COMPATIBILITY_PROTOCOL_VERSION = "2025-11-25";
+    public static final Set<String> SUPPORTED_VERSIONS = Set.of(
+        "2024-11-05",
+        "2025-03-26",
+        "2025-06-18",
+        COMPATIBILITY_PROTOCOL_VERSION,
+        PROTOCOL_VERSION
+    );
 
+    public static final String METHOD_INITIALIZE = "initialize";
+    public static final String METHOD_INITIALIZED = "notifications/initialized";
+    public static final String METHOD_PING = "ping";
     public static final String METHOD_DISCOVER = "server/discover";
     public static final String METHOD_TOOLS_LIST = "tools/list";
     public static final String METHOD_TOOLS_CALL = "tools/call";
 
     public static final Set<String> SUPPORTED_METHODS = Set.of(
+        METHOD_INITIALIZE, METHOD_INITIALIZED, METHOD_PING,
         METHOD_DISCOVER, METHOD_TOOLS_LIST, METHOD_TOOLS_CALL
     );
 
@@ -67,21 +76,25 @@ public final class McpRequestValidator {
             || !"2.0".equals(body.get("jsonrpc").getAsString()))
             return ValidationResult.fail(JsonRpcErrors.INVALID_REQUEST, "jsonrpc must be \"2.0\"");
 
-        JsonElement idEl = body.get("id");
-        if (idEl == null)
-            return ValidationResult.fail(JsonRpcErrors.INVALID_REQUEST, "missing id");
-        try {
-            StrictJsonReader.validateRpcId(idEl);
-        } catch (Exception e) {
-            return ValidationResult.fail(JsonRpcErrors.INVALID_REQUEST, "invalid id: " + e.getMessage());
-        }
-
         JsonElement methodEl = body.get("method");
         if (methodEl == null || !methodEl.isJsonPrimitive() || !methodEl.getAsJsonPrimitive().isString())
             return ValidationResult.fail(JsonRpcErrors.INVALID_REQUEST, "missing or invalid method");
         String method = methodEl.getAsString();
-        if (!SUPPORTED_METHODS.contains(method))
+        boolean notification = method.startsWith("notifications/");
+        if (!SUPPORTED_METHODS.contains(method) && !notification)
             return ValidationResult.fail(JsonRpcErrors.METHOD_NOT_FOUND, "method not found: " + method);
+
+        JsonElement idEl = body.get("id");
+        if (idEl == null) {
+            if (!notification)
+                return ValidationResult.fail(JsonRpcErrors.INVALID_REQUEST, "missing id");
+        } else {
+            try {
+                StrictJsonReader.validateRpcId(idEl);
+            } catch (Exception e) {
+                return ValidationResult.fail(JsonRpcErrors.INVALID_REQUEST, "invalid id: " + e.getMessage());
+            }
+        }
 
         JsonObject params = null;
         if (body.has("params")) {
@@ -99,6 +112,17 @@ public final class McpRequestValidator {
      */
     public static boolean isValidProtocolVersion(String header) {
         return header != null && SUPPORTED_VERSIONS.contains(header.trim());
+    }
+
+    /** A standard initialize request carries the version in params, not necessarily in a header. */
+    public static String negotiateProtocolVersion(JsonObject params) {
+        if (params == null || !params.has("protocolVersion")
+            || !params.get("protocolVersion").isJsonPrimitive()
+            || !params.getAsJsonPrimitive("protocolVersion").isString()) {
+            return null;
+        }
+        String requested = params.get("protocolVersion").getAsString();
+        return SUPPORTED_VERSIONS.contains(requested) ? requested : COMPATIBILITY_PROTOCOL_VERSION;
     }
 
     /**
@@ -144,6 +168,11 @@ public final class McpRequestValidator {
      */
     public static boolean methodMatchesHeader(String header, String bodyMethod) {
         return header != null && header.trim().equals(bodyMethod);
+    }
+
+    /** Extension headers are optional for standard MCP clients, but checked when supplied. */
+    public static boolean optionalMethodHeaderMatches(String header, String bodyMethod) {
+        return header == null || methodMatchesHeader(header, bodyMethod);
     }
 
     /**

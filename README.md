@@ -4,7 +4,7 @@
 
 **English** | **[中文](docs/README.zh.md)**
 
-MCMCP (Minecraft MCP) turns the running Minecraft client into an [MCP 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28) server. Any MCP Host running on the same machine can connect via loopback HTTP to observe and interact with the game in real time. This enables AI-driven gameplay assistance, automated testing, and agent-based workflows without modifying the Minecraft server or writing a plugin.
+MCMCP (Minecraft MCP) turns the running Minecraft client into a Streamable HTTP MCP server. It supports the standard initialization lifecycle used by Codex and retains its MCP 2026-07-28 discovery extensions. Any MCP Host running on the same machine can connect via loopback HTTP to observe and interact with the game in real time.
 
 The mod is **client-only**: install it like any other Fabric mod and it starts a local HTTP server on `127.0.0.1:25585`. No server-side installation, no network exposure, no authentication tokens — just localhost.
 
@@ -71,7 +71,7 @@ For layer breakdown and security model details, see the [Contributing Guide](doc
 | `minecraft_get_game_state` | Get a structured snapshot of client, connection, player, world, debug, and target state. |
 | `minecraft_capture_screenshot` | Capture the current window framebuffer as a PNG image. |
 
-The server also supports the standard MCP methods `server/discover` and `tools/list`.
+The server supports the standard `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call` methods. The newer `server/discover` extension remains available for compatible clients.
 
 ## Install
 
@@ -117,28 +117,24 @@ cp build/libs/mcmcp-0.1.0.jar ~/Library/Application\ Support/minecraft/mods/
 
 1. **Install the mod** — see [Install](#install) above.
 2. **Launch Minecraft** — start the game with the **26.2-Fabric** profile and enter any world (singleplayer or multiplayer). When the world finishes loading, you will see a chat message: `MCMCP: local programs can read chat, state, screen, and submit commands via MCP`.
-3. **Configure your MCP client** — point any MCP-compatible client at `http://127.0.0.1:25585/mcp`. Required headers for every request:
+3. **Configure Codex** — register the local Streamable HTTP endpoint:
 
-   | Header | Value |
-   |---|---|
-   | `Content-Type` | `application/json` |
-   | `Accept` | `application/json, text/event-stream` |
-   | `MCP-Protocol-Version` | `2026-07-28` |
-   | `Mcp-Method` | Must match the `method` field in the JSON-RPC body |
-   | `Mcp-Name` | Required only for `tools/call` — must match `params.name` |
+   ```bash
+   codex mcp add mcmcp --url http://127.0.0.1:25585/mcp
+   ```
 
-4. **Verify the connection** — send a `server/discover` request and check the response:
+   Restart or open a new Codex task after adding or updating the server so its tool inventory is refreshed.
+
+4. **Verify the standard handshake** — send an `initialize` request and check the response:
 
    ```bash
    curl -s http://127.0.0.1:25585/mcp \
      -H "Content-Type: application/json" \
      -H "Accept: application/json, text/event-stream" \
-     -H "MCP-Protocol-Version: 2026-07-28" \
-     -H "Mcp-Method: server/discover" \
-     -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
    ```
 
-   A successful response includes `supportedVersions`, `capabilities`, and `serverInfo`.
+   A successful response includes `protocolVersion`, `capabilities`, and `serverInfo`.
 
 ### Example — call a tool
 
@@ -148,20 +144,14 @@ Call `minecraft_get_game_state` to read the current player and world state:
 curl -s http://127.0.0.1:25585/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "MCP-Protocol-Version: 2026-07-28" \
-  -H "Mcp-Method: tools/call" \
-  -H "Mcp-Name: minecraft_get_game_state" \
+  -H "MCP-Protocol-Version: 2025-11-25" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
     "method": "tools/call",
     "params": {
       "name": "minecraft_get_game_state",
-      "arguments": {"sections": ["player", "world"]},
-      "_meta": {
-        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-        "io.modelcontextprotocol/clientCapabilities": {}
-      }
+      "arguments": {"sections": ["player", "world"]}
     }
   }'
 ```

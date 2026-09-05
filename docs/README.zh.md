@@ -2,7 +2,7 @@
 
 > 一个纯客户端 Fabric 模组，在 Minecraft Java 版客户端内嵌入本地 MCP 服务器，让外部 AI 代理读取聊天、游戏状态和截图，并提交斜杠命令 —— 无需任何服务端模组或插件。
 
-MCMCP（Minecraft MCP）将运行中的 Minecraft 客户端变成一个 [MCP 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28) 服务器。同一台机器上的任何 MCP Host 都可以通过本地 HTTP 连接，实时观察和操作游戏。这使得 AI 驱动的游戏辅助、自动化测试和基于代理的工作流成为可能，而无需修改 Minecraft 服务端或编写插件。
+MCMCP（Minecraft MCP）将运行中的 Minecraft 客户端变成 Streamable HTTP MCP 服务器。它支持 Codex 使用的标准初始化生命周期，同时保留 MCP 2026-07-28 发现扩展。同一台机器上的任何 MCP Host 都可以通过本地 HTTP 连接，实时观察和操作游戏。
 
 本模组是**纯客户端**的：像安装任何其他 Fabric 模组一样安装它，它会在 `127.0.0.1:25585` 上启动一个本地 HTTP 服务器。无需服务端安装、无需网络暴露、无需认证令牌 —— 只用本地回环。
 
@@ -71,7 +71,7 @@ flowchart TD
 | `minecraft_get_game_state` | 获取客户端、连接、玩家、世界、调试和目标状态的结构化快照。 |
 | `minecraft_capture_screenshot` | 将当前窗口帧缓冲区捕获为 PNG 图像。 |
 
-服务器还支持标准 MCP 方法 `server/discover` 和 `tools/list`。
+服务器支持标准的 `initialize`、`notifications/initialized`、`ping`、`tools/list` 和 `tools/call` 方法，并为兼容客户端保留较新的 `server/discover` 扩展。
 
 ## 安装
 
@@ -117,28 +117,24 @@ cp build/libs/mcmcp-0.1.0.jar ~/Library/Application\ Support/minecraft/mods/
 
 1. **安装模组** — 参见上方[安装](#安装)章节。
 2. **启动 Minecraft** — 使用 **26.2-Fabric** 配置文件启动游戏，进入任意世界（单人或多人）。世界加载完成后，你会看到一条聊天消息：`MCMCP: local programs can read chat, state, screen, and submit commands via MCP`。
-3. **配置 MCP 客户端** — 将任何兼容 MCP 的客户端指向 `http://127.0.0.1:25585/mcp`。每个请求需要以下头部：
+3. **配置 Codex** — 注册本地 Streamable HTTP 端点：
 
-   | 头部 | 值 |
-   |---|---|
-   | `Content-Type` | `application/json` |
-   | `Accept` | `application/json, text/event-stream` |
-   | `MCP-Protocol-Version` | `2026-07-28` |
-   | `Mcp-Method` | 必须与 JSON-RPC 主体中的 `method` 字段一致 |
-   | `Mcp-Name` | 仅 `tools/call` 需要 —— 必须与 `params.name` 一致 |
+   ```bash
+   codex mcp add mcmcp --url http://127.0.0.1:25585/mcp
+   ```
 
-4. **验证连接** — 发送 `server/discover` 请求并检查响应：
+   添加或更新服务器后，重启 Codex 或新建任务以刷新工具清单。
+
+4. **验证标准握手** — 发送 `initialize` 请求并检查响应：
 
    ```bash
    curl -s http://127.0.0.1:25585/mcp \
      -H "Content-Type: application/json" \
      -H "Accept: application/json, text/event-stream" \
-     -H "MCP-Protocol-Version: 2026-07-28" \
-     -H "Mcp-Method: server/discover" \
-     -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
    ```
 
-   成功响应包含 `supportedVersions`、`capabilities` 和 `serverInfo`。
+   成功响应包含 `protocolVersion`、`capabilities` 和 `serverInfo`。
 
 ### 示例 —— 调用工具
 
@@ -148,20 +144,14 @@ cp build/libs/mcmcp-0.1.0.jar ~/Library/Application\ Support/minecraft/mods/
 curl -s http://127.0.0.1:25585/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "MCP-Protocol-Version: 2026-07-28" \
-  -H "Mcp-Method: tools/call" \
-  -H "Mcp-Name: minecraft_get_game_state" \
+  -H "MCP-Protocol-Version: 2025-11-25" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
     "method": "tools/call",
     "params": {
       "name": "minecraft_get_game_state",
-      "arguments": {"sections": ["player", "world"]},
-      "_meta": {
-        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-        "io.modelcontextprotocol/clientCapabilities": {}
-      }
+      "arguments": {"sections": ["player", "world"]}
     }
   }'
 ```

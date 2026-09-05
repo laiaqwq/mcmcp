@@ -50,6 +50,26 @@ public final class McpResponses {
 
     // ---- MCP server/discover result ----
 
+    public static JsonObject initializeResult(String modVersion, String protocolVersion) {
+        JsonObject result = new JsonObject();
+        result.addProperty("protocolVersion", protocolVersion);
+
+        JsonObject caps = new JsonObject();
+        JsonObject toolsCap = new JsonObject();
+        toolsCap.addProperty("listChanged", false);
+        caps.add("tools", toolsCap);
+        result.add("capabilities", caps);
+
+        JsonObject serverInfo = new JsonObject();
+        serverInfo.addProperty("name", "mcmcp");
+        serverInfo.addProperty("version", modVersion);
+        result.add("serverInfo", serverInfo);
+        result.addProperty("instructions",
+            "MCMCP exposes tools for the current Minecraft client. " +
+            "Commands are submitted, not confirmed executed; read chat messages for feedback.");
+        return result;
+    }
+
     public static JsonObject discoverResult(String modVersion) {
         JsonObject result = new JsonObject();
         result.addProperty("resultType", "complete");
