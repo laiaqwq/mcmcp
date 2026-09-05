@@ -150,13 +150,38 @@ public final class ProtocolDispatchHandler extends SimpleChannelInboundHandler<F
         // Dispatch
         long deadlineNanos = startNanos + requestTimeoutNanos;
         CancellationToken cancellation = new CancellationToken();
+        // Set exactly once, by whichever of the timeout task or the dispatch
+        // completion writes the response. Guards metrics and the wire write.
+        var responded = new java.util.concurrent.atomic.AtomicBoolean(false);
 
         // Cancel on channel close
         ctx.channel().closeFuture().addListener(f -> cancellation.cancel());
 
+        // Transport-level timeout: abandon in-flight work and answer with a
+        // JSON-RPC timeout error. A late completion is suppressed below and
+        // counted via metrics.lateCompletion().
+        var timeoutFuture = ctx.executor().schedule(() -> {
+            if (cancellation.isCancelled() || !ctx.channel().isActive()) return;
+            if (!responded.compareAndSet(false, true)) return;
+            cancellation.cancel();
+            metrics.timeout();
+            metrics.requestFinished();
+            sendJsonRpcError(ctx, id, JsonRpcErrors.REQUEST_TIMEOUT, "request timed out",
+                null, HttpResponseStatus.REQUEST_TIMEOUT);
+        }, requestTimeoutNanos, TimeUnit.NANOSECONDS);
+
         dispatcher.dispatch(id, method, params, deadlineNanos)
             .whenComplete((response, throwable) -> {
+                timeoutFuture.cancel(false);
                 long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+
+                if (!responded.compareAndSet(false, true)) {
+                    // The timeout (or a racing completion) already answered.
+                    metrics.lateCompletion();
+                    McmcpLogger.debug("late_completion", "method", method,
+                        "duration_ms", String.valueOf(durationMs));
+                    return;
+                }
                 metrics.requestFinished();
 
                 if (throwable != null) {
@@ -208,7 +233,7 @@ public final class ProtocolDispatchHandler extends SimpleChannelInboundHandler<F
                                    JsonObject data, HttpResponseStatus status) {
         JsonObject response = (id != null)
             ? McpResponses.error(id, code, message, data)
-            : McpResponses.errorNoId(code, message);
+            : McpResponses.errorNoId(code, message, data);
         byte[] bytes = response.toString().getBytes(StandardCharsets.UTF_8);
         FullHttpResponse httpResponse = new DefaultFullHttpResponse(
             HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(bytes));

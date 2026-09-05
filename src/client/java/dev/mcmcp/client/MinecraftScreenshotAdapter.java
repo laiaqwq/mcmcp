@@ -50,106 +50,117 @@ public final class MinecraftScreenshotAdapter implements MinecraftPorts.Screensh
         CompletableFuture<MinecraftPorts.Result<ScreenshotResult, ToolError>> captureFuture =
             new CompletableFuture<>();
 
-        scheduler.submit(() -> {
-            Minecraft mc = Minecraft.getInstance();
-            if (mc == null) {
-                return MinecraftPorts.Result.<Object, ToolError>err(
-                    ToolError.of(ToolErrorCode.SCREENSHOT_UNAVAILABLE, "minecraft client not available"));
-            }
+        // If scheduler.submit throws synchronously (e.g. Minecraft.getInstance()
+        // is null in a headless test), the permit we acquired above must be
+        // released before the exception propagates.
+        boolean submitted = false;
+        try {
+            scheduler.submit(() -> {
+                Minecraft mc = Minecraft.getInstance();
+                if (mc == null) {
+                    return MinecraftPorts.Result.<Object, ToolError>err(
+                        ToolError.of(ToolErrorCode.SCREENSHOT_UNAVAILABLE, "minecraft client not available"));
+                }
 
-            RenderTarget fb = mc.gameRenderer.mainRenderTarget();
-            if (fb == null || fb.width <= 0 || fb.height <= 0) {
-                return MinecraftPorts.Result.<Object, ToolError>err(
-                    ToolError.of(ToolErrorCode.SCREENSHOT_UNAVAILABLE,
-                        "framebuffer or render context unavailable"));
-            }
+                RenderTarget fb = mc.gameRenderer.mainRenderTarget();
+                if (fb == null || fb.width <= 0 || fb.height <= 0) {
+                    return MinecraftPorts.Result.<Object, ToolError>err(
+                        ToolError.of(ToolErrorCode.SCREENSHOT_UNAVAILABLE,
+                            "framebuffer or render context unavailable"));
+                }
 
-            String capturedAt = TimeUtil.nowUtc();
+                String capturedAt = TimeUtil.nowUtc();
 
-            // Screenshot.takeScreenshot queues an async GPU readback.
-            // The consumer fires when the readback is complete.
-            Screenshot.takeScreenshot(fb, nativeImage -> {
-                try {
-                    if (nativeImage == null) {
-                        captureFuture.complete(MinecraftPorts.Result.err(
-                            ToolError.of(ToolErrorCode.SCREENSHOT_UNAVAILABLE,
-                                "screenshot readback returned null")));
-                        return;
-                    }
-
-                    try (nativeImage) {
-                        int imgWidth = nativeImage.getWidth();
-                        int imgHeight = nativeImage.getHeight();
-                        if (imgWidth <= 0 || imgHeight <= 0) {
+                // Screenshot.takeScreenshot queues an async GPU readback.
+                // The consumer fires when the readback is complete.
+                Screenshot.takeScreenshot(fb, nativeImage -> {
+                    try {
+                        if (nativeImage == null) {
                             captureFuture.complete(MinecraftPorts.Result.err(
                                 ToolError.of(ToolErrorCode.SCREENSHOT_UNAVAILABLE,
-                                    "screenshot has invalid dimensions")));
+                                    "screenshot readback returned null")));
                             return;
                         }
 
-                        int[] pixels = nativeImage.makePixelArray();
-                        byte[] rgba = new byte[imgWidth * imgHeight * 4];
-                        for (int i = 0; i < pixels.length; i++) {
-                            int p = pixels[i];
-                            rgba[i * 4] = (byte) ((p >> 16) & 0xFF); // R
-                            rgba[i * 4 + 1] = (byte) ((p >> 8) & 0xFF);  // G
-                            rgba[i * 4 + 2] = (byte) (p & 0xFF);         // B
-                            rgba[i * 4 + 3] = (byte) ((p >> 24) & 0xFF); // A
-                        }
-
-                        PixelFrame frame = new PixelFrame(rgba, imgWidth, imgHeight, capturedAt);
-
-                        // Encode PNG off the render thread
-                        CompletableFuture.runAsync(() -> {
-                            try {
-                                byte[] png = PngEncoder.encode(frame, maxWidth);
-                                int outWidth = Math.min(frame.width(), maxWidth);
-                                int outHeight = (int) Math.max(1, Math.round(
-                                    (double) frame.height() * outWidth / frame.width()));
-                                var result = new ScreenshotResult(
-                                    frame.capturedAt(),
-                                    outWidth, outHeight,
-                                    ScreenshotResult.MIME_TYPE,
-                                    frame.width(), frame.height(),
-                                    png
-                                );
-                                captureFuture.complete(MinecraftPorts.Result.ok(result));
-                            } catch (Exception e) {
-                                McmcpLogger.error("png_encode_error", "error", e.getMessage());
+                        try (nativeImage) {
+                            int imgWidth = nativeImage.getWidth();
+                            int imgHeight = nativeImage.getHeight();
+                            if (imgWidth <= 0 || imgHeight <= 0) {
                                 captureFuture.complete(MinecraftPorts.Result.err(
                                     ToolError.of(ToolErrorCode.SCREENSHOT_UNAVAILABLE,
-                                        "PNG encoding failed")));
-                            } finally {
-                                frame.close();
-                                exclusiveLock.release();
+                                        "screenshot has invalid dimensions")));
+                                return;
                             }
-                        });
-                    }
-                } catch (Exception e) {
-                    McmcpLogger.error("screenshot_callback_error", "error", e.getMessage());
-                    captureFuture.complete(MinecraftPorts.Result.err(
-                        ToolError.of(ToolErrorCode.SCREENSHOT_UNAVAILABLE,
-                            "screenshot callback error: " + e.getMessage())));
-                    exclusiveLock.release();
-                }
-            });
 
-            // Return a sentinel — the actual result comes via captureFuture
-            return MinecraftPorts.Result.ok(new Object());
-        }, deadlineNanos).handle((submitResult, throwable) -> {
-            if (throwable != null) {
-                exclusiveLock.release();
-                if (throwable instanceof TimeoutException) {
-                    return MinecraftPorts.Result.err(ToolError.of(ToolErrorCode.TIMEOUT,
-                        "screenshot submission timed out"));
+                            int[] pixels = nativeImage.makePixelArray();
+                            byte[] rgba = new byte[imgWidth * imgHeight * 4];
+                            for (int i = 0; i < pixels.length; i++) {
+                                int p = pixels[i];
+                                rgba[i * 4] = (byte) ((p >> 16) & 0xFF); // R
+                                rgba[i * 4 + 1] = (byte) ((p >> 8) & 0xFF);  // G
+                                rgba[i * 4 + 2] = (byte) (p & 0xFF);         // B
+                                rgba[i * 4 + 3] = (byte) ((p >> 24) & 0xFF); // A
+                            }
+
+                            PixelFrame frame = new PixelFrame(rgba, imgWidth, imgHeight, capturedAt);
+
+                            // Encode PNG off the render thread
+                            CompletableFuture.runAsync(() -> {
+                                try {
+                                    byte[] png = PngEncoder.encode(frame, maxWidth);
+                                    int outWidth = Math.min(frame.width(), maxWidth);
+                                    int outHeight = (int) Math.max(1, Math.round(
+                                        (double) frame.height() * outWidth / frame.width()));
+                                    var result = new ScreenshotResult(
+                                        frame.capturedAt(),
+                                        outWidth, outHeight,
+                                        ScreenshotResult.MIME_TYPE,
+                                        frame.width(), frame.height(),
+                                        png
+                                    );
+                                    captureFuture.complete(MinecraftPorts.Result.ok(result));
+                                } catch (Exception e) {
+                                    McmcpLogger.error("png_encode_error", "error", e.getMessage());
+                                    captureFuture.complete(MinecraftPorts.Result.err(
+                                        ToolError.of(ToolErrorCode.SCREENSHOT_UNAVAILABLE,
+                                            "PNG encoding failed")));
+                                } finally {
+                                    frame.close();
+                                    exclusiveLock.release();
+                                }
+                            });
+                        }
+                    } catch (Exception e) {
+                        McmcpLogger.error("screenshot_callback_error", "error", e.getMessage());
+                        captureFuture.complete(MinecraftPorts.Result.err(
+                            ToolError.of(ToolErrorCode.SCREENSHOT_UNAVAILABLE,
+                                "screenshot callback error: " + e.getMessage())));
+                        exclusiveLock.release();
+                    }
+                });
+
+                // Return a sentinel — the actual result comes via captureFuture
+                return MinecraftPorts.Result.ok(new Object());
+            }, deadlineNanos).handle((submitResult, throwable) -> {
+                if (throwable != null) {
+                    exclusiveLock.release();
+                    if (throwable instanceof TimeoutException) {
+                        return MinecraftPorts.Result.err(ToolError.of(ToolErrorCode.TIMEOUT,
+                            "screenshot submission timed out"));
+                    }
+                    return MinecraftPorts.Result.err(ToolError.internal("internal error"));
                 }
-                return MinecraftPorts.Result.err(ToolError.internal("internal error"));
+                // The submit succeeded; now wait for the async capture to complete.
+                // The capture callback fires on a future render tick, so we can't block here.
+                // Instead, return the captureFuture's result when it completes.
+                return null; // placeholder — we'll chain below
+            });
+            submitted = true;
+        } finally {
+            if (!submitted) {
+                exclusiveLock.release();
             }
-            // The submit succeeded; now wait for the async capture to complete.
-            // The capture callback fires on a future render tick, so we can't block here.
-            // Instead, return the captureFuture's result when it completes.
-            return null; // placeholder — we'll chain below
-        });
+        }
 
         // Chain: wait for the async capture to complete with a timeout
         long timeoutNanos = deadlineNanos > 0 ? deadlineNanos :

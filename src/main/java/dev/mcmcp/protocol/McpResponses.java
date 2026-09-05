@@ -45,7 +45,11 @@ public final class McpResponses {
     }
 
     public static JsonObject errorNoId(int code, String message) {
-        return error(com.google.gson.JsonNull.INSTANCE, code, message);
+        return errorNoId(code, message, null);
+    }
+
+    public static JsonObject errorNoId(int code, String message, JsonObject data) {
+        return error(com.google.gson.JsonNull.INSTANCE, code, message, data);
     }
 
     // ---- MCP server/discover result ----

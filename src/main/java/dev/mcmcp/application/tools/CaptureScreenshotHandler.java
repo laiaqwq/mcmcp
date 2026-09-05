@@ -1,5 +1,6 @@
 package dev.mcmcp.application.tools;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import dev.mcmcp.application.MinecraftPorts;
 import dev.mcmcp.application.ToolCallOutcome;
@@ -29,7 +30,12 @@ public final class CaptureScreenshotHandler {
     public CompletableFuture<ToolCallOutcome> handle(JsonObject params, long deadlineNanos) {
         int maxWidth = 3840;
         if (params != null && params.has("max_width") && !params.get("max_width").isJsonNull()) {
-            maxWidth = params.get("max_width").getAsInt();
+            JsonElement maxWidthEl = params.get("max_width");
+            if (!maxWidthEl.isJsonPrimitive() || !maxWidthEl.getAsJsonPrimitive().isNumber()) {
+                return CompletableFuture.completedFuture(ToolCallOutcome.error(
+                    ToolError.of(ToolErrorCode.INVALID_ARGUMENT, "max_width must be a number")));
+            }
+            maxWidth = maxWidthEl.getAsInt();
             if (maxWidth < 1 || maxWidth > 3840)
                 return CompletableFuture.completedFuture(ToolCallOutcome.error(
                     ToolError.of(ToolErrorCode.INVALID_ARGUMENT,
@@ -39,7 +45,13 @@ public final class CaptureScreenshotHandler {
         long deadline = deadlineNanos > 0 ? deadlineNanos : defaultDeadlineNanos;
 
         return screenshotPort.capture(maxWidth, deadline)
-            .thenApply(result -> {
+            .handle((result, throwable) -> {
+                if (throwable != null) {
+                    Throwable cause = throwable instanceof java.util.concurrent.CompletionException
+                        && throwable.getCause() != null ? throwable.getCause() : throwable;
+                    return ToolCallOutcome.error(ToolError.internal(
+                        "screenshot port failed: " + cause.getMessage()));
+                }
                 if (result.isSuccess()) {
                     var shot = result.value();
                     String json = JsonRpcCodec.encodeScreenshotResult(shot).toString();

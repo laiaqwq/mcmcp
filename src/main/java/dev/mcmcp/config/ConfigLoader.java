@@ -5,6 +5,8 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.MalformedJsonException;
 import dev.mcmcp.observability.McmcpLogger;
 import java.io.IOException;
 import java.io.InputStream;
@@ -57,6 +59,12 @@ public final class ConfigLoader {
             if (!el.isJsonObject())
                 throw new McmcpConfig.ConfigException("config must be a JSON object");
             JsonObject obj = el.getAsJsonObject();
+            try {
+                if (reader.peek() != JsonToken.END_DOCUMENT)
+                    throw new McmcpConfig.ConfigException("trailing content after config object");
+            } catch (MalformedJsonException e) {
+                throw new McmcpConfig.ConfigException("trailing content after config object");
+            }
 
             // Reject unknown fields
             for (String key : obj.keySet()) {
@@ -74,25 +82,39 @@ public final class ConfigLoader {
             );
             config.validate();
             return config;
+        } catch (McmcpConfig.ConfigException e) {
+            throw e;
         } catch (IOException e) {
             throw new McmcpConfig.ConfigException("cannot read config: " + e.getMessage());
+        } catch (RuntimeException e) {
+            throw new McmcpConfig.ConfigException("cannot parse config: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }
 
     private static boolean reqBool(JsonObject obj, String key) {
         if (!obj.has(key)) throw new McmcpConfig.ConfigException("missing field: " + key);
-        JsonPrimitive p = obj.getAsJsonPrimitive(key);
-        if (p == null || !p.isBoolean())
+        JsonElement e = obj.get(key);
+        if (e == null || e.isJsonNull() || !e.isJsonPrimitive())
+            throw new McmcpConfig.ConfigException("field " + key + " must be boolean");
+        JsonPrimitive p = e.getAsJsonPrimitive();
+        if (!p.isBoolean())
             throw new McmcpConfig.ConfigException("field " + key + " must be boolean");
         return p.getAsBoolean();
     }
 
     private static int reqInt(JsonObject obj, String key) {
         if (!obj.has(key)) throw new McmcpConfig.ConfigException("missing field: " + key);
-        JsonPrimitive p = obj.getAsJsonPrimitive(key);
-        if (p == null || !p.isNumber())
+        JsonElement e = obj.get(key);
+        if (e == null || e.isJsonNull() || !e.isJsonPrimitive())
             throw new McmcpConfig.ConfigException("field " + key + " must be integer");
-        return p.getAsInt();
+        JsonPrimitive p = e.getAsJsonPrimitive();
+        if (!p.isNumber())
+            throw new McmcpConfig.ConfigException("field " + key + " must be integer");
+        try {
+            return p.getAsInt();
+        } catch (NumberFormatException ex) {
+            throw new McmcpConfig.ConfigException("field " + key + " must be integer");
+        }
     }
 
     private static final java.util.Set<String> KNOWN_FIELDS = java.util.Set.of(

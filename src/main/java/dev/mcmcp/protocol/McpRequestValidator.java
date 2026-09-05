@@ -73,6 +73,7 @@ public final class McpRequestValidator {
      */
     public static ValidationResult validateEnvelope(JsonObject body) {
         if (!body.has("jsonrpc") || !body.get("jsonrpc").isJsonPrimitive()
+            || !body.get("jsonrpc").getAsJsonPrimitive().isString()
             || !"2.0".equals(body.get("jsonrpc").getAsString()))
             return ValidationResult.fail(JsonRpcErrors.INVALID_REQUEST, "jsonrpc must be \"2.0\"");
 

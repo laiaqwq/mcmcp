@@ -34,9 +34,18 @@ public final class GetGameStateHandler {
     public CompletableFuture<ToolCallOutcome> handle(JsonObject params, long deadlineNanos) {
         List<String> sections = new ArrayList<>();
         if (params != null && params.has("sections") && !params.get("sections").isJsonNull()) {
-            var arr = params.getAsJsonArray("sections");
+            JsonElement sectionsEl = params.get("sections");
+            if (!sectionsEl.isJsonArray()) {
+                return CompletableFuture.completedFuture(ToolCallOutcome.error(
+                    ToolError.of(ToolErrorCode.INVALID_ARGUMENT, "sections must be an array")));
+            }
+            var arr = sectionsEl.getAsJsonArray();
             var seen = new HashSet<String>();
             for (JsonElement el : arr) {
+                if (!el.isJsonPrimitive() || !el.getAsJsonPrimitive().isString()) {
+                    return CompletableFuture.completedFuture(ToolCallOutcome.error(
+                        ToolError.of(ToolErrorCode.INVALID_ARGUMENT, "sections must be an array of strings")));
+                }
                 String s = el.getAsString();
                 if (!VALID_SECTIONS.contains(s))
                     return CompletableFuture.completedFuture(ToolCallOutcome.error(
@@ -53,7 +62,13 @@ public final class GetGameStateHandler {
         long deadline = deadlineNanos > 0 ? deadlineNanos : defaultDeadlineNanos;
 
         return statePort.snapshot(sections, deadline)
-            .thenApply(result -> {
+            .handle((result, throwable) -> {
+                if (throwable != null) {
+                    Throwable cause = throwable instanceof java.util.concurrent.CompletionException
+                        && throwable.getCause() != null ? throwable.getCause() : throwable;
+                    return ToolCallOutcome.error(ToolError.internal(
+                        "state port failed: " + cause.getMessage()));
+                }
                 if (result.isSuccess()) {
                     String json = JsonRpcCodec.encodeGameState(result.value(), sections).toString();
                     return ToolCallOutcome.success(json);

@@ -6,11 +6,16 @@ import dev.mcmcp.domain.error.ToolError;
 import dev.mcmcp.domain.error.ToolErrorCode;
 import dev.mcmcp.observability.McmcpLogger;
 import dev.mcmcp.util.TimeUtil;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
 
 /**
  * Command port implementation. Schedules command execution on the client thread
@@ -44,6 +49,20 @@ public final class MinecraftCommandAdapter implements MinecraftPorts.CommandPort
             }
 
             LocalPlayer player = mc.player;
+            Consumer<String> messageSink = reason -> player.sendSystemMessage(Component.literal("MCMCP: " + reason));
+
+            // Singleplayer-only guards: a paused world never ticks the integrated
+            // server, so a submitted command would sit silently in the queue.
+            IntegratedServer server = mc.getSingleplayerServer();
+            boolean serverPaused = server != null && server.isPaused();
+            Optional<MinecraftPorts.Result<CommandResult, ToolError>> preflight = checkSingleplayer(
+                mc.isLocalServer(), mc.isPaused(), serverPaused,
+                resolveCommandsAllowed(mc, player), messageSink
+            );
+            if (preflight.isPresent()) {
+                return preflight.get();
+            }
+
             ClientPacketListener handler = mc.getConnection();
             if (handler == null) {
                 return MinecraftPorts.Result.err(ToolError.of(ToolErrorCode.CONNECTION_NOT_AVAILABLE,
@@ -64,6 +83,7 @@ public final class MinecraftCommandAdapter implements MinecraftPorts.CommandPort
                 return MinecraftPorts.Result.ok(result);
             } catch (Exception e) {
                 McmcpLogger.error("command_rejected", "error", e.getMessage());
+                messageSink.accept("command submission failed: " + e.getMessage());
                 return MinecraftPorts.Result.err(ToolError.of(ToolErrorCode.COMMAND_REJECTED,
                     "client-side command preparation failed"));
             }
@@ -80,5 +100,72 @@ public final class MinecraftCommandAdapter implements MinecraftPorts.CommandPort
             }
             return captured;
         });
+    }
+
+    /**
+     * Testable singleplayer pre-flight check. Returns empty when the command may
+     * proceed; otherwise a rejected result with an appropriate {@link ToolErrorCode}.
+     *
+     * @param isLocalServer      whether the current world is a singleplayer/integrated server
+     * @param isPaused           whether the client-side pause menu is active
+     * @param isServerPaused     whether the integrated server itself is paused
+     * @param commandsAllowed    whether command execution is allowed in this world
+     * @param messageSink        receiver for player-facing rejection messages; may be null
+     */
+    static Optional<MinecraftPorts.Result<CommandResult, ToolError>> checkSingleplayer(
+        boolean isLocalServer,
+        boolean isPaused,
+        boolean isServerPaused,
+        boolean commandsAllowed,
+        Consumer<String> messageSink
+    ) {
+        if (!isLocalServer) {
+            return Optional.empty();
+        }
+        if (isPaused || isServerPaused) {
+            return Optional.of(reject(messageSink, ToolErrorCode.GAME_NOT_READY,
+                "command not submitted: the singleplayer world is paused — resume the game and try again"));
+        }
+        if (!commandsAllowed) {
+            return Optional.of(reject(messageSink, ToolErrorCode.COMMAND_REJECTED,
+                "command not submitted: commands are disabled for this world (Allow Commands is off)"));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Whether command execution is allowed when neither world-creation flag nor
+     * LAN-granted operator permission would permit it.
+     */
+    static boolean commandsAllowed(boolean serverAllowsCommands, boolean playerHasCommandPermission) {
+        return serverAllowsCommands || playerHasCommandPermission;
+    }
+
+    /**
+     * Reads the live Minecraft world/player state to determine whether commands are
+     * allowed. This is a thin, untested shell around values that can be driven
+     * directly via {@link #commandsAllowed(boolean, boolean)}.
+     */
+    private boolean resolveCommandsAllowed(Minecraft mc, LocalPlayer player) {
+        IntegratedServer server = mc.getSingleplayerServer();
+        boolean serverAllowsCommands = false;
+        if (server != null) {
+            try {
+                serverAllowsCommands = server.getWorldData().isAllowCommands();
+            } catch (Throwable ignored) {}
+        }
+        boolean playerHasCommandPermission = player.permissions().hasPermission(
+            new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS));
+        return commandsAllowed(serverAllowsCommands, playerHasCommandPermission);
+    }
+
+    static MinecraftPorts.Result<CommandResult, ToolError> reject(
+        Consumer<String> messageSink, ToolErrorCode code, String reason
+    ) {
+        if (messageSink != null) {
+            messageSink.accept(reason);
+        }
+        McmcpLogger.debug("command_rejected_precheck", "code", code.name(), "reason", reason);
+        return MinecraftPorts.Result.err(ToolError.of(code, reason));
     }
 }

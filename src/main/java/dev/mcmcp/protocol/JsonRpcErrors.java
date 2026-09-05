@@ -13,6 +13,7 @@ public final class JsonRpcErrors {
     public static final int HEADER_MISMATCH = -32020;
     public static final int RATE_LIMITED = -32000;
     public static final int UNSUPPORTED_PROTOCOL_VERSION = -32021;
+    public static final int REQUEST_TIMEOUT = -32003;
 
     private JsonRpcErrors() {}
 }

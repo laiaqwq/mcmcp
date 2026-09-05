@@ -44,12 +44,13 @@ public final class HttpSecurityGate {
     public CheckResult check(HttpRequest request) {
         // Path check (raw, no query, no trailing slash)
         String uri = request.uri();
-        // Strip query string if present (we reject queries anyway)
-        String path = uri;
-        int q = uri.indexOf('?');
-        if (q >= 0) path = uri.substring(0, q);
 
-        if (!MCP_PATH.equals(path)) {
+        // A query string is not allowed on /mcp; treat it as a path mismatch.
+        if (uri.indexOf('?') >= 0) {
+            return CheckResult.fail(HttpResponseStatus.NOT_FOUND, "not found");
+        }
+
+        if (!MCP_PATH.equals(uri)) {
             return CheckResult.fail(HttpResponseStatus.NOT_FOUND, "not found");
         }
 
