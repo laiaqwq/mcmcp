@@ -115,46 +115,38 @@ Then copy the JAR to your mods folder:
 cp build/libs/mcmcp-0.1.0.jar ~/Library/Application\ Support/minecraft/mods/
 ```
 
-### Verify installation
-
-After launching Minecraft and entering a world, check that the MCP server is listening:
-
-```bash
-curl -s http://127.0.0.1:25585/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -H "MCP-Protocol-Version: 2026-07-28" \
-  -H "Mcp-Method: server/discover" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
-```
-
-A successful response includes `supportedVersions`, `capabilities`, and `serverInfo`.
-
 ## Usage
 
-### Launch Minecraft with auto-join
+### Quick start
 
-A launch script is provided to start Minecraft and automatically enter an existing world:
+1. **Install the mod** — see [Install](#install) above.
+2. **Launch Minecraft** — start the game with the **26.2-Fabric** profile and enter any world (singleplayer or multiplayer). When the world finishes loading, you will see a chat message: `MCMCP: local programs can read chat, state, screen, and submit commands via MCP`.
+3. **Configure your MCP client** — point any MCP-compatible client at `http://127.0.0.1:25585/mcp`. Required headers for every request:
 
-```bash
-bash scripts/launch_minecraft.sh
-```
+   | Header | Value |
+   |---|---|
+   | `Content-Type` | `application/json` |
+   | `Accept` | `application/json, text/event-stream` |
+   | `MCP-Protocol-Version` | `2026-07-28` |
+   | `Mcp-Method` | Must match the `method` field in the JSON-RPC body |
+   | `Mcp-Name` | Required only for `tools/call` — must match `params.name` |
 
-This script launches the `26.2-Fabric` version directly via Java with `--quickPlaySingleplayer` to skip the title screen and join the world named `新的世界`. Adjust the `WORLD_NAME` variable in the script for your save.
+4. **Verify the connection** — send a `server/discover` request and check the response:
 
-### Connect an MCP Host
+   ```bash
+   curl -s http://127.0.0.1:25585/mcp \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
+     -H "MCP-Protocol-Version: 2026-07-28" \
+     -H "Mcp-Method: server/discover" \
+     -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+   ```
 
-Point any MCP-compatible client at `http://127.0.0.1:25585/mcp`. Required headers for every request:
+   A successful response includes `supportedVersions`, `capabilities`, and `serverInfo`.
 
-| Header | Value |
-|---|---|
-| `Content-Type` | `application/json` |
-| `Accept` | `application/json, text/event-stream` |
-| `MCP-Protocol-Version` | `2026-07-28` |
-| `Mcp-Method` | Must match the `method` field in the JSON-RPC body |
-| `Mcp-Name` | Required only for `tools/call` — must match `params.name` |
+### Example — call a tool
 
-Example — call `minecraft_get_game_state`:
+Call `minecraft_get_game_state` to read the current player and world state:
 
 ```bash
 curl -s http://127.0.0.1:25585/mcp \

@@ -115,46 +115,38 @@ gradle build
 cp build/libs/mcmcp-0.1.0.jar ~/Library/Application\ Support/minecraft/mods/
 ```
 
-### 验证安装
-
-启动 Minecraft 并进入世界后，检查 MCP 服务器是否在监听：
-
-```bash
-curl -s http://127.0.0.1:25585/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -H "MCP-Protocol-Version: 2026-07-28" \
-  -H "Mcp-Method: server/discover" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
-```
-
-成功响应包含 `supportedVersions`、`capabilities` 和 `serverInfo`。
-
 ## 使用
 
-### 启动 Minecraft 并自动进入世界
+### 快速开始
 
-提供了一个启动脚本，用于启动 Minecraft 并自动进入已有世界：
+1. **安装模组** — 参见上方[安装](#安装)章节。
+2. **启动 Minecraft** — 使用 **26.2-Fabric** 配置文件启动游戏，进入任意世界（单人或多人）。世界加载完成后，你会看到一条聊天消息：`MCMCP: local programs can read chat, state, screen, and submit commands via MCP`。
+3. **配置 MCP 客户端** — 将任何兼容 MCP 的客户端指向 `http://127.0.0.1:25585/mcp`。每个请求需要以下头部：
 
-```bash
-bash scripts/launch_minecraft.sh
-```
+   | 头部 | 值 |
+   |---|---|
+   | `Content-Type` | `application/json` |
+   | `Accept` | `application/json, text/event-stream` |
+   | `MCP-Protocol-Version` | `2026-07-28` |
+   | `Mcp-Method` | 必须与 JSON-RPC 主体中的 `method` 字段一致 |
+   | `Mcp-Name` | 仅 `tools/call` 需要 —— 必须与 `params.name` 一致 |
 
-该脚本通过 Java 直接启动 `26.2-Fabric` 版本，使用 `--quickPlaySingleplayer` 跳过标题界面并加入名为 `新的世界` 的存档。请根据你的存档名称修改脚本中的 `WORLD_NAME` 变量。
+4. **验证连接** — 发送 `server/discover` 请求并检查响应：
 
-### 连接 MCP Host
+   ```bash
+   curl -s http://127.0.0.1:25585/mcp \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
+     -H "MCP-Protocol-Version: 2026-07-28" \
+     -H "Mcp-Method: server/discover" \
+     -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+   ```
 
-将任何兼容 MCP 的客户端指向 `http://127.0.0.1:25585/mcp`。每个请求需要以下头部：
+   成功响应包含 `supportedVersions`、`capabilities` 和 `serverInfo`。
 
-| 头部 | 值 |
-|---|---|
-| `Content-Type` | `application/json` |
-| `Accept` | `application/json, text/event-stream` |
-| `MCP-Protocol-Version` | `2026-07-28` |
-| `Mcp-Method` | 必须与 JSON-RPC 主体中的 `method` 字段一致 |
-| `Mcp-Name` | 仅 `tools/call` 需要 —— 必须与 `params.name` 一致 |
+### 示例 —— 调用工具
 
-示例 —— 调用 `minecraft_get_game_state`：
+调用 `minecraft_get_game_state` 读取当前玩家和世界状态：
 
 ```bash
 curl -s http://127.0.0.1:25585/mcp \
