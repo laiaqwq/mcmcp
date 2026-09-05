@@ -44,9 +44,6 @@ All Minecraft access happens on the client render thread to avoid race condition
 flowchart TD
     Host["MCP Host (AI Agent)"]
     Server["Loopback HTTP Server<br/>127.0.0.1:25585"]
-    Gate["Security Gate<br/>Host / Origin / Content-Type"]
-    Limits["Limits<br/>1 MiB body · rate limiter"]
-    Codec["Strict JSON-RPC Codec"]
     Dispatch["Tool Dispatcher"]
     Adapters["Minecraft Client Adapters"]
     Cmd["Command → ClientPacketListener"]
@@ -55,7 +52,7 @@ flowchart TD
     Shot["Screenshot → RenderTarget / NativeImage"]
 
     Host -- "POST /mcp (JSON-RPC 2.0)" --> Server
-    Server --> Gate --> Limits --> Codec --> Dispatch
+    Server --> Dispatch
     Dispatch -- "CompletableFuture (client thread)" --> Adapters
     Adapters --> Cmd
     Adapters --> Chat
@@ -81,9 +78,8 @@ The server also supports the standard MCP methods `server/discover` and `tools/l
 ### Prerequisites
 
 - **Minecraft Java Edition 26.2** (installed via the official launcher or HMCL)
-- **Fabric Loader 0.19.4+** (install via [fabricmc.net](https://fabricmc.net/use/installer/))
-- **Fabric API 0.158.0+26.2** (download from [Modrinth](https://modrinth.com/mod/fabric-api) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/fabric-api))
-- **Java 25** (for building from source)
+- **Fabric Loader 0.19.4+** — follow the [official installation guide](https://fabricmc.net/use/installer/)
+- **Fabric API 0.158.0+26.2** — download from [Modrinth](https://modrinth.com/mod/fabric-api) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/fabric-api)
 
 ### Option A — Pre-built JAR
 

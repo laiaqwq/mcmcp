@@ -44,9 +44,6 @@ MCMCP（Minecraft MCP）将运行中的 Minecraft 客户端变成一个 [MCP 202
 flowchart TD
     Host["MCP Host（AI 代理）"]
     Server["回环 HTTP 服务器<br/>127.0.0.1:25585"]
-    Gate["安全网关<br/>Host / Origin / Content-Type"]
-    Limits["限制<br/>1 MiB 请求体 · 速率限制器"]
-    Codec["严格 JSON-RPC 编解码器"]
     Dispatch["工具分发器"]
     Adapters["Minecraft 客户端适配器"]
     Cmd["命令 → ClientPacketListener"]
@@ -55,7 +52,7 @@ flowchart TD
     Shot["截图 → RenderTarget / NativeImage"]
 
     Host -- "POST /mcp（JSON-RPC 2.0）" --> Server
-    Server --> Gate --> Limits --> Codec --> Dispatch
+    Server --> Dispatch
     Dispatch -- "CompletableFuture（客户端线程）" --> Adapters
     Adapters --> Cmd
     Adapters --> Chat
@@ -81,9 +78,8 @@ flowchart TD
 ### 前置条件
 
 - **Minecraft Java 版 26.2**（通过官方启动器或 HMCL 安装）
-- **Fabric Loader 0.19.4+**（通过 [fabricmc.net](https://fabricmc.net/use/installer/) 安装）
-- **Fabric API 0.158.0+26.2**（从 [Modrinth](https://modrinth.com/mod/fabric-api) 或 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/fabric-api) 下载）
-- **Java 25**（从源码构建时需要）
+- **Fabric Loader 0.19.4+** — 参阅[官方安装指南](https://fabricmc.net/use/installer/)
+- **Fabric API 0.158.0+26.2** — 从 [Modrinth](https://modrinth.com/mod/fabric-api) 或 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/fabric-api) 下载
 
 ### 方式 A — 预构建 JAR
 
