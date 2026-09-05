@@ -23,6 +23,7 @@ Thumbs.db
 logs/
 run/
 config/mcmcp.json
+config/sodium-mixins.properties
 
 # Scripts output
 *.log

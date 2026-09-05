@@ -5,28 +5,42 @@
 
 set -euo pipefail
 
-MINECRAFT_DIR="$HOME/Library/Application Support/minecraft"
-VERSION_DIR="$MINECRAFT_DIR/versions/26.2-Fabric"
+# All machine-specific values can be overridden via environment variables.
+MINECRAFT_DIR="${MCMCP_MINECRAFT_DIR:-$HOME/Library/Application Support/minecraft}"
+VERSION_NAME="${MCMCP_VERSION_NAME:-26.2-Fabric}"
+VERSION_DIR="$MINECRAFT_DIR/versions/$VERSION_NAME"
 GAME_DIR="$VERSION_DIR"  # Use the version-specific game directory (has mods + saves)
 NATIVES_DIR="$VERSION_DIR/natives-macos-arm64"
 ASSETS_DIR="$MINECRAFT_DIR/assets"
-ASSET_INDEX="32"
-JAVA="/opt/homebrew/opt/openjdk@25/bin/java"
+ASSET_INDEX="${MCMCP_ASSET_INDEX:-32}"
+
+# Prefer the Homebrew OpenJDK 25 install; fall back to `java` on PATH.
+JAVA="${MCMCP_JAVA:-/opt/homebrew/opt/openjdk@25/bin/java}"
+if [[ ! -x "$JAVA" ]]; then
+  JAVA="$(command -v java || true)"
+  if [[ -z "$JAVA" ]]; then
+    echo "error: no Java found (set MCMCP_JAVA or put java on PATH)" >&2
+    exit 1
+  fi
+fi
 
 # Offline player identity (matches existing save usercache)
-USERNAME="laiaqwq"
-UUID="d2004cb3-e9a6-4df5-9ae7-eca4c52ecf1a"
+USERNAME="${MCMCP_USERNAME:-laiaqwq}"
+UUID="${MCMCP_UUID:-d2004cb3-e9a6-4df5-9ae7-eca4c52ecf1a}"
 ACCESS_TOKEN="offline-token"
 
 # World to auto-join
-WORLD_NAME="新的世界"
+WORLD_NAME="${MCMCP_WORLD_NAME:-新的世界}"
 
 # Build classpath from version JSON, respecting OS rules
 CLASSPATH=$(python3 << 'PYEOF'
 import json, os, platform
 
-minecraft_dir = os.path.expanduser("~/Library/Application Support/minecraft")
-version_json_path = os.path.join(minecraft_dir, "versions/26.2-Fabric/26.2-Fabric.json")
+minecraft_dir = os.path.expanduser(os.environ.get(
+    "MCMCP_MINECRAFT_DIR", "~/Library/Application Support/minecraft"))
+version_name = os.environ.get("MCMCP_VERSION_NAME", "26.2-Fabric")
+version_json_path = os.path.join(
+    minecraft_dir, "versions", version_name, version_name + ".json")
 
 with open(version_json_path) as f:
     version_json = json.load(f)
@@ -71,13 +85,15 @@ for lib in version_json.get("libraries", []):
     if os.path.exists(lib_path):
         classpath_parts.append(lib_path)
 
-client_jar = os.path.join(minecraft_dir, "versions/26.2-Fabric/26.2-Fabric.jar")
+client_jar = os.path.join(
+    minecraft_dir, "versions", version_name, version_name + ".jar")
 classpath_parts.append(client_jar)
 print(os.pathsep.join(classpath_parts))
 PYEOF
 )
 
-echo "Launching Minecraft 26.2-Fabric..."
+echo "Launching Minecraft $VERSION_NAME..."
+echo "Java: $JAVA"
 echo "Game directory: $GAME_DIR"
 echo "World: $WORLD_NAME"
 echo "Classpath entries: $(echo "$CLASSPATH" | tr ':' '\n' | wc -l | tr -d ' ')"
@@ -98,7 +114,7 @@ exec "$JAVA" \
   -cp "$CLASSPATH" \
   net.fabricmc.loader.impl.launch.knot.KnotClient \
   --username "$USERNAME" \
-  --version "26.2-Fabric" \
+  --version "$VERSION_NAME" \
   --gameDir "$GAME_DIR" \
   --assetsDir "$ASSETS_DIR" \
   --assetIndex "$ASSET_INDEX" \
