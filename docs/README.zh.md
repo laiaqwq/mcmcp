@@ -16,7 +16,7 @@ MCMCP（Minecraft MCP）将运行中的 Minecraft 客户端变成一个 [MCP 202
 - [安装](#安装)
 - [使用](#使用)
 - [配置](#配置)
-- [安全](#安全)
+- [贡献](#贡献)
 - [许可证](#许可证)
 
 ## 背景
@@ -40,40 +40,30 @@ MCMCP（Minecraft MCP）将运行中的 Minecraft 客户端变成一个 [MCP 202
 
 ## 架构
 
-```
-MCP Host（AI 代理）
-    │
-    │  POST /mcp （基于 HTTP 的 JSON-RPC 2.0）
-    ▼
-┌─────────────────────────────────────────────┐
-│  回环 HTTP 服务器  (127.0.0.1:25585)         │
-│  ├─ Host / Origin / Content-Type 校验       │
-│  ├─ 1 MiB 请求体限制、速率限制器            │
-│  ├─ 严格 JSON-RPC 编解码器                  │
-│  └─ 工具分发器                              │
-└─────────────────────────────────────────────┘
-    │
-    │  CompletableFuture（客户端线程）
-    ▼
-┌─────────────────────────────────────────────┐
-│  Minecraft 客户端适配器                     │
-│  ├─ 命令  → ClientPacketListener            │
-│  ├─ 聊天 → BoundedChatBuffer                │
-│  ├─ 状态 → Minecraft / ClientLevel          │
-│  └─ 截图 → RenderTarget / NativeImage       │
-└─────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Host["MCP Host（AI 代理）"]
+    Server["回环 HTTP 服务器<br/>127.0.0.1:25585"]
+    Gate["安全网关<br/>Host / Origin / Content-Type"]
+    Limits["限制<br/>1 MiB 请求体 · 速率限制器"]
+    Codec["严格 JSON-RPC 编解码器"]
+    Dispatch["工具分发器"]
+    Adapters["Minecraft 客户端适配器"]
+    Cmd["命令 → ClientPacketListener"]
+    Chat["聊天 → BoundedChatBuffer"]
+    State["状态 → Minecraft / ClientLevel"]
+    Shot["截图 → RenderTarget / NativeImage"]
+
+    Host -- "POST /mcp（JSON-RPC 2.0）" --> Server
+    Server --> Gate --> Limits --> Codec --> Dispatch
+    Dispatch -- "CompletableFuture（客户端线程）" --> Adapters
+    Adapters --> Cmd
+    Adapters --> Chat
+    Adapters --> State
+    Adapters --> Shot
 ```
 
-### 分层
-
-| 层 | 源码集 | 依赖 | 职责 |
-|---|---|---|---|
-| 领域层 | `src/main/java/dev/mcmcp/domain` | 仅 JDK | DTO、错误码、工具定义 |
-| 基础设施 | `src/main/java/dev/mcmcp/{config,chat,screenshot,util,observability}` | Gson | 配置、速率限制器、聊天缓冲区、PNG 编码器 |
-| 协议层 | `src/main/java/dev/mcmcp/protocol` | Gson | 严格 JSON 读取器、JSON-RPC 编解码器、MCP 校验器、工具目录 |
-| 应用层 | `src/main/java/dev/mcmcp/application` | 领域 + 协议 | 工具处理器、分发器、端口接口 |
-| 传输层 | `src/main/java/dev/mcmcp/transport` | Netty | 回环 HTTP 服务器、安全网关、分发处理器 |
-| Minecraft 适配器 | `src/client/java/dev/mcmcp/client` | Minecraft + Fabric | 端口实现、入口点 |
+分层详情和安全模型请参阅[贡献指南](CONTRIBUTING.md#architecture)。
 
 ## MCP 工具
 
@@ -212,15 +202,9 @@ curl -s http://127.0.0.1:25585/mcp \
 | `requests_per_second` | 整数 | `20` | 总 MCP 请求的令牌桶速率限制 |
 | `screenshots_per_second` | 整数 | `1` | 截图捕获的独立速率限制 |
 
-## 安全
+## 贡献
 
-- **仅回环：** 服务器仅绑定到 `127.0.0.1`（IPv4）。无法远程连接。
-- **Origin 拒绝：** 任何包含 `Origin` 头部的请求（包括 `Origin: null`）都会被拒绝，返回 HTTP 403。这阻止了基于浏览器的访问。
-- **Host 校验：** `Host` 头部必须是 `127.0.0.1:<端口>` 或 `localhost:<端口>`（不区分大小写）。
-- **无 CORS 头部：** 服务器从不发出 `Access-Control-*` 头部。
-- **请求体限制：** 超过 1 MiB 的请求体被拒绝，返回 HTTP 413。
-- **无认证：** 同一操作系统账户下的任何本地进程都可以连接。这是设计如此 —— 威胁模型是浏览器 Origin 隔离，而非本地进程隔离。
-- **速率限制：** 对总请求使用令牌桶限制器，对截图捕获使用独立限制器。
+欢迎贡献！请参阅[贡献指南](CONTRIBUTING.md)了解开发环境、构建命令、测试、代码规范、架构分层、安全模型和 PR 流程。
 
 ## 许可证
 

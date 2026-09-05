@@ -7,7 +7,9 @@ Thanks for your interest in contributing to MCMCP! This guide covers the develop
 - [Development Environment](#development-environment)
 - [Build](#build)
 - [Testing](#testing)
+- [Architecture](#architecture)
 - [Project Structure](#project-structure)
+- [Security Model](#security-model)
 - [Code Conventions](#code-conventions)
 - [Minecraft 26.2 API Notes](#minecraft-262-api-notes)
 - [Pull Request Process](#pull-request-process)
@@ -77,6 +79,42 @@ The test script covers:
 
 The end-to-end test requires a local Minecraft 26.2 installation with the `26.2-Fabric` profile and an existing singleplayer world.
 
+## Architecture
+
+```mermaid
+flowchart TD
+    Host["MCP Host (AI Agent)"]
+    Server["Loopback HTTP Server<br/>127.0.0.1:25585"]
+    Gate["Security Gate<br/>Host / Origin / Content-Type"]
+    Limits["Limits<br/>1 MiB body · rate limiter"]
+    Codec["Strict JSON-RPC Codec"]
+    Dispatch["Tool Dispatcher"]
+    Adapters["Minecraft Client Adapters"]
+    Cmd["Command → ClientPacketListener"]
+    Chat["Chat → BoundedChatBuffer"]
+    State["State → Minecraft / ClientLevel"]
+    Shot["Screenshot → RenderTarget / NativeImage"]
+
+    Host -- "POST /mcp (JSON-RPC 2.0)" --> Server
+    Server --> Gate --> Limits --> Codec --> Dispatch
+    Dispatch -- "CompletableFuture (client thread)" --> Adapters
+    Adapters --> Cmd
+    Adapters --> Chat
+    Adapters --> State
+    Adapters --> Shot
+```
+
+### Layers
+
+| Layer | Source set | Dependencies | Role |
+|---|---|---|---|
+| Domain | `src/main/java/dev/mcmcp/domain` | JDK only | DTOs, error codes, tool definitions |
+| Infrastructure | `src/main/java/dev/mcmcp/{config,chat,screenshot,util,observability}` | Gson | Config, rate limiter, chat buffer, PNG encoder |
+| Protocol | `src/main/java/dev/mcmcp/protocol` | Gson | Strict JSON reader, JSON-RPC codec, MCP validator, tool catalog |
+| Application | `src/main/java/dev/mcmcp/application` | Domain + Protocol | Tool handlers, dispatcher, port interfaces |
+| Transport | `src/main/java/dev/mcmcp/transport` | Netty | Loopback HTTP server, security gate, dispatch handler |
+| Minecraft Adapter | `src/client/java/dev/mcmcp/client` | Minecraft + Fabric | Port implementations, entrypoint |
+
 ## Project Structure
 
 ```
@@ -109,16 +147,15 @@ src/
 └── test/java/dev/mcmcp/  # Pure-Java unit tests
 ```
 
-### Layers
+## Security Model
 
-| Layer | Source set | Dependencies | Role |
-|---|---|---|---|
-| Domain | `src/main/java/dev/mcmcp/domain` | JDK only | DTOs, error codes, tool definitions |
-| Infrastructure | `src/main/java/dev/mcmcp/{config,chat,screenshot,util,observability}` | Gson | Config, rate limiter, chat buffer, PNG encoder |
-| Protocol | `src/main/java/dev/mcmcp/protocol` | Gson | Strict JSON reader, JSON-RPC codec, MCP validator, tool catalog |
-| Application | `src/main/java/dev/mcmcp/application` | Domain + Protocol | Tool handlers, dispatcher, port interfaces |
-| Transport | `src/main/java/dev/mcmcp/transport` | Netty | Loopback HTTP server, security gate, dispatch handler |
-| Minecraft Adapter | `src/client/java/dev/mcmcp/client` | Minecraft + Fabric | Port implementations, entrypoint |
+- **Loopback only:** The server binds exclusively to `127.0.0.1` (IPv4). No remote connections are possible.
+- **Origin rejection:** Any request containing an `Origin` header (including `Origin: null`) is rejected with HTTP 403. This prevents browser-based access.
+- **Host validation:** The `Host` header must be `127.0.0.1:<port>` or `localhost:<port>` (case-insensitive).
+- **No CORS headers:** The server never emits `Access-Control-*` headers.
+- **Body limit:** Request bodies larger than 1 MiB are rejected with HTTP 413.
+- **No authentication:** Any local process under the same OS account can connect. This is by design — the threat model is browser-origin isolation, not local process isolation.
+- **Rate limiting:** Token-bucket limiter on total requests and a separate limiter on screenshot captures.
 
 ## Code Conventions
 

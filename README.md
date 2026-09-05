@@ -16,7 +16,6 @@ The mod is **client-only**: install it like any other Fabric mod and it starts a
 - [Install](#install)
 - [Usage](#usage)
 - [Configuration](#configuration)
-- [Security](#security)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -41,40 +40,30 @@ All Minecraft access happens on the client render thread to avoid race condition
 
 ## Architecture
 
-```
-MCP Host (AI Agent)
-    │
-    │  POST /mcp  (JSON-RPC 2.0 over HTTP)
-    ▼
-┌─────────────────────────────────────────────┐
-│  Loopback HTTP Server  (127.0.0.1:25585)    │
-│  ├─ Host / Origin / Content-Type gate       │
-│  ├─ 1 MiB body limit, rate limiter          │
-│  ├─ Strict JSON-RPC codec                   │
-│  └─ Tool Dispatcher                         │
-└─────────────────────────────────────────────┘
-    │
-    │  CompletableFuture (client thread)
-    ▼
-┌─────────────────────────────────────────────┐
-│  Minecraft Client Adapters                  │
-│  ├─ Command  → ClientPacketListener         │
-│  ├─ Chat     → BoundedChatBuffer            │
-│  ├─ State    → Minecraft / ClientLevel      │
-│  └─ Screenshot → RenderTarget / NativeImage │
-└─────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Host["MCP Host (AI Agent)"]
+    Server["Loopback HTTP Server<br/>127.0.0.1:25585"]
+    Gate["Security Gate<br/>Host / Origin / Content-Type"]
+    Limits["Limits<br/>1 MiB body · rate limiter"]
+    Codec["Strict JSON-RPC Codec"]
+    Dispatch["Tool Dispatcher"]
+    Adapters["Minecraft Client Adapters"]
+    Cmd["Command → ClientPacketListener"]
+    Chat["Chat → BoundedChatBuffer"]
+    State["State → Minecraft / ClientLevel"]
+    Shot["Screenshot → RenderTarget / NativeImage"]
+
+    Host -- "POST /mcp (JSON-RPC 2.0)" --> Server
+    Server --> Gate --> Limits --> Codec --> Dispatch
+    Dispatch -- "CompletableFuture (client thread)" --> Adapters
+    Adapters --> Cmd
+    Adapters --> Chat
+    Adapters --> State
+    Adapters --> Shot
 ```
 
-### Layers
-
-| Layer | Source set | Dependencies | Role |
-|---|---|---|---|
-| Domain | `src/main/java/dev/mcmcp/domain` | JDK only | DTOs, error codes, tool definitions |
-| Infrastructure | `src/main/java/dev/mcmcp/{config,chat,screenshot,util,observability}` | Gson | Config, rate limiter, chat buffer, PNG encoder |
-| Protocol | `src/main/java/dev/mcmcp/protocol` | Gson | Strict JSON reader, JSON-RPC codec, MCP validator, tool catalog |
-| Application | `src/main/java/dev/mcmcp/application` | Domain + Protocol | Tool handlers, dispatcher, port interfaces |
-| Transport | `src/main/java/dev/mcmcp/transport` | Netty | Loopback HTTP server, security gate, dispatch handler |
-| Minecraft Adapter | `src/client/java/dev/mcmcp/client` | Minecraft + Fabric | Port implementations, entrypoint |
+For layer breakdown and security model details, see the [Contributing Guide](docs/CONTRIBUTING.md#architecture).
 
 ## MCP Tools
 
@@ -213,19 +202,9 @@ The mod reads `config/mcmcp.json` (relative to the Minecraft game directory). It
 | `requests_per_second` | int | `20` | Token-bucket rate limit for total MCP requests |
 | `screenshots_per_second` | int | `1` | Separate rate limit for screenshot captures |
 
-## Security
-
-- **Loopback only:** The server binds exclusively to `127.0.0.1` (IPv4). No remote connections are possible.
-- **Origin rejection:** Any request containing an `Origin` header (including `Origin: null`) is rejected with HTTP 403. This prevents browser-based access.
-- **Host validation:** The `Host` header must be `127.0.0.1:<port>` or `localhost:<port>` (case-insensitive).
-- **No CORS headers:** The server never emits `Access-Control-*` headers.
-- **Body limit:** Request bodies larger than 1 MiB are rejected with HTTP 413.
-- **No authentication:** Any local process under the same OS account can connect. This is by design — the threat model is browser-origin isolation, not local process isolation.
-- **Rate limiting:** Token-bucket limiter on total requests and a separate limiter on screenshot captures.
-
 ## Contributing
 
-Contributions are welcome! See the [Contributing Guide](docs/CONTRIBUTING.md) for development setup, build commands, testing, code conventions, and the pull request process.
+Contributions are welcome! See the [Contributing Guide](docs/CONTRIBUTING.md) for development setup, build commands, testing, code conventions, architecture layers, security model, and the pull request process.
 
 ## License
 
