@@ -2,6 +2,8 @@
 
 > A pure client-side Fabric mod that embeds a local MCP server inside the Minecraft Java Edition client, letting external AI agents read chat, game state, and screenshots, and submit slash commands — without any server-side mod or plugin.
 
+**English** | **[中文](docs/README.zh.md)**
+
 MCMCP (Minecraft MCP) turns the running Minecraft client into an [MCP 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28) server. Any MCP Host running on the same machine can connect via loopback HTTP to observe and interact with the game in real time. This enables AI-driven gameplay assistance, automated testing, and agent-based workflows without modifying the Minecraft server or writing a plugin.
 
 The mod is **client-only**: install it like any other Fabric mod and it starts a local HTTP server on `127.0.0.1:25585`. No server-side installation, no network exposure, no authentication tokens — just localhost.
@@ -15,8 +17,7 @@ The mod is **client-only**: install it like any other Fabric mod and it starts a
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Security](#security)
-- [Build](#build)
-- [Testing](#testing)
+- [Contributing](#contributing)
 - [License](#license)
 
 ## Background
@@ -222,49 +223,10 @@ The mod reads `config/mcmcp.json` (relative to the Minecraft game directory). It
 - **No authentication:** Any local process under the same OS account can connect. This is by design — the threat model is browser-origin isolation, not local process isolation.
 - **Rate limiting:** Token-bucket limiter on total requests and a separate limiter on screenshot captures.
 
-## Build
+## Contributing
 
-```bash
-# Pure-Java unit tests (no Minecraft dependency)
-gradle test
-
-# Full build including client sources (requires Minecraft 26.2 + Loom 1.17)
-gradle build
-```
-
-Build output: `build/libs/mcmcp-0.1.0.jar`
-
-## Testing
-
-### Unit tests
-
-```bash
-gradle test
-```
-
-65 pure-Java tests cover the domain, protocol, application, transport, and infrastructure layers.
-
-### End-to-end test
-
-An external Python test script exercises the live MCP server against a running Minecraft client:
-
-```bash
-# 1. Launch Minecraft (auto-joins the world)
-bash scripts/launch_minecraft.sh &
-
-# 2. Wait for the client to load, then run tests
-python3 scripts/test_mcmcp.py
-```
-
-The test script covers:
-- `server/discover` — protocol version, capabilities, server info
-- `tools/list` — all 4 tools in correct order with schemas
-- `minecraft_get_game_state` — player, world, client, connection sections
-- `minecraft_execute_command` — command submission
-- `minecraft_get_chat_messages` — chat buffer read
-- `minecraft_capture_screenshot` — PNG capture and validation
-- Security: Origin rejection (403), null Origin (403), wrong Host, oversized body (413), wrong Content-Type (415)
+Contributions are welcome! See the [Contributing Guide](docs/CONTRIBUTING.md) for development setup, build commands, testing, code conventions, and the pull request process.
 
 ## License
 
-MIT
+[Apache License 2.0](LICENSE)

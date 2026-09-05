@@ -26,3 +26,7 @@ config/mcmcp.json
 
 # Scripts output
 *.log
+
+# Internal product/design documents (not for public release)
+PRD.md
+IMPLEMENTATION.md
